@@ -1,86 +1,125 @@
 import math
-import numpy as np
-from scipy.optimize import minimize_scalar
 
-""" Аналитическое решение """
-
-
-def analytical_solution(t, x0, y0, V0, alpha, g):
-    x_kon = round(x0 + V0 * math.cos(alpha) * t, 4)
-    y_kon = round(y0 + V0 * math.sin(alpha) * t - (g * t ** 2) / 2, 4)
-    V_kon = round(V0 * math.sin(alpha) - g * t, 4)
-    return x_kon, y_kon, V_kon
-
-
-""" Численное решение для заданного шага dt """
-
-
-def numerical_solution(dt, x0, y0, V0, alpha, g, t):
+""" Численное решение """
+def calculate_trajectory(dt, tk, x0, y0, V0, alpha, g):
+    """Вычисляет траекторию методом Эйлера с заданным шагом dt"""
     Vx = V0 * math.cos(alpha)
     Vy = V0 * math.sin(alpha)
     x, y = x0, y0
 
-    t_values = np.arange(dt, t + dt, dt)
-    for t_current in t_values:
-        x = x + Vx * dt
-        y = y + Vy * dt
-        Vy = Vy - g * dt
+    t = 0
+    while t < tk:
+        x += Vx * dt
+        y += Vy * dt
+        Vy -= g * dt
+        t += dt
 
     return x, y, Vy
 
 
-"""Относительная погрешность между аналитическим и численным решением"""
+"""Аналитическое решение"""
+def analytical_solution(t, x0, y0, V0, alpha, g):
+    x_an = x0 + V0 * math.cos(alpha) * t
+    y_an = y0 + V0 * math.sin(alpha) * t - (g * t ** 2) / 2
+    Vy_an = V0 * math.sin(alpha) - g * t
+    return x_an, y_an, Vy_an
+
+"""
+    Находит оптимальный шаг dt, при котором относительная погрешность
+    координаты Y становится меньше target_error%
+"""
+def find_optimal_step(tk, x0, y0, V0, alpha, g, target_error=0.1, max_iterations=20):
+    # Аналитическое решение в конечный момент времени
+    x_an, y_an, Vy_an = analytical_solution(tk, x0, y0, V0, alpha, g)
+
+    # Начальные значения
+    dt = 0.1  # начальный шаг
+    best_dt = dt
+    min_error = float('inf')
+
+    print("Поиск оптимального шага dt:")
+    print(f'Целевая погрешность: {target_error}%')
+    print("-" * 60)
+
+    for iteration in range(max_iterations):
+        # Численное решение
+        x_num, y_num, Vy_num = calculate_trajectory(dt, tk, x0, y0, V0, alpha, g)
+
+        # Относительные погрешности
+        err_x = abs(x_num - x_an) / abs(x_an) * 100 if abs(x_an) > 1e-10 else 0
+        err_y = abs(y_num - y_an) / abs(y_an) * 100 if abs(y_an) > 1e-10 else 0
+        err_Vy = abs(Vy_num - Vy_an) / abs(Vy_an) * 100 if abs(Vy_an) > 1e-10 else 0
+
+        # Основной критерий - погрешность координаты Y
+        current_error = err_y
+
+        print(f'Итерация {iteration + 1}: dt = {dt}, погрешность Y = {current_error}%')
+
+        # Сохраняем лучший результат
+        if current_error < min_error:
+            min_error = current_error
+            best_dt = dt
+
+        # Проверяем условие достижения целевой погрешности
+        if current_error <= target_error:
+            print("\nЦелевая погрешность достигнута!")
+            return dt, current_error, x_num, y_num, Vy_num
+
+        # Уменьшаем шаг для следующей итерации
+        dt /= 2
+
+    print("\nДостигнута максимальная погрешность: {:.4f}%".format(min_error))
+    return best_dt, min_error, *calculate_trajectory(best_dt, tk, x0, y0, V0, alpha, g)
 
 
-def relative_error(dt, x0, y0, V0, alpha, g, t):
-    x_num, y_num, Vy_num = numerical_solution(dt, x0, y0, V0, alpha, g, t)
+def main():
+    print("=== РАСЧЕТ ДВИЖЕНИЯ ТЕЛА, БРОШЕННОГО ПОД УГЛОМ К ГОРИЗОНТУ ===")
+    x0 = int(input('Начальная координата x (м): '))
+    y0 = int(input('Начальная координата y (м): '))
+    V0 = float(input('Начальная скорость V (м/с): '))
+    alpha = int(input('Угол броска (градусы): '))
+    tk = float(input('Время полета t (с): '))
+    g = 9.8
+    alpha = math.radians(alpha)
+    tn = 0
 
-    # Исправлено: передаем параметр t в аналитическое решение
-    x_anal, y_anal, Vy_anal = analytical_solution(t, x0, y0, V0, alpha, g)
+    # Целевая относительная погрешность (%)
+    target_error = 0.1
 
-    error_x = abs(x_num - x_anal) / abs(x_anal) if x_anal != 0 else abs(x_num - x_anal)
-    error_y = abs(y_num - y_anal) / abs(y_anal) if y_anal != 0 else abs(y_num - y_anal)
-    error_Vy = abs(Vy_num - Vy_anal) / abs(Vy_anal) if Vy_anal != 0 else abs(Vy_num - Vy_anal)
+    # Аналитическое решение
+    x_an, y_an, Vy_an = analytical_solution(tk, x0, y0, V0, alpha, g)
 
-    # Суммарная относительная погрешность
-    total_error = error_x + error_y + error_Vy
-    return total_error
+    print("\n=== АНАЛИТИЧЕСКОЕ РЕШЕНИЕ ===")
+    print(f'Координата X: {x_an} м')
+    print(f'Координата Y: {y_an} м')
+    print(f'Скорость Vy:  {Vy_an}')
+    print()
 
+    # Поиск оптимального шага
+    optimal_dt, achieved_error, x_opt, y_opt, Vy_opt = find_optimal_step(
+        tk, x0, y0, V0, alpha, g, target_error)
 
-print(f'=== Введите начальные данные: ===')
-x0 = int(input('Начальная координата x (м): '))
-y0 = int(input('Начальная координата y (м): '))
-V0 = float(input('Начальная скорость V (м/с): '))
-alpha = int(input('Угол броска (градусы): '))
-t = float(input('Время полета t (с): '))
-print(f'=================================')
+    print("\n=== ОПТИМАЛЬНЫЙ ШАГ dt ===")
+    print(f'Найденный шаг: dt = {optimal_dt} с')
+    print(f'Достигнутая погрешность координаты Y: {achieved_error}%')
+    print()
 
-g = 9.8
-alpha = math.radians(alpha)
-dt_min = 1e-4
-dt_max = 0.1
+    print("=== ЧИСЛЕННОЕ РЕШЕНИЕ С ОПТИМАЛЬНЫМ ШАГОМ ===")
+    print(f'Координата X: {x_opt} м')
+    print(f'Координата Y: {y_opt} м')
+    print(f'Скорость Vy:  {Vy_opt} м/с')
+    print()
 
-x_kon, y_kon, V_kon = analytical_solution(t, x0, y0, V0, alpha, g)
-print()
-print(f'=== Результаты аналитического решения: ===')
-print(f'Координата x: {x_kon}')
-print(f'Координата y: {y_kon}')
-print(f'Скорость по y: {V_kon}')
-print(f'==========================================')
-print()
+    # Сравнение с аналитическим решением
+    err_x = abs(x_opt - x_an) / abs(x_an) * 100
+    err_y = abs(y_opt - y_an) / abs(y_an) * 100
+    err_Vy = abs(Vy_opt - Vy_an) / abs(Vy_an) * 100
 
+    print("=== ОТНОСИТЕЛЬНЫЕ ПОГРЕШНОСТИ ===")
+    print(f'Погрешность координаты X: {err_x}%')
+    print(f'Погрешность координаты Y: {err_y}%')
+    print(f'Погрешность скорости Vy:  {err_Vy}%')
+    print()
 
-def error_function(dt):
-    return relative_error(dt, x0, y0, V0, alpha, g, t)
-
-
-# Исправлено: убраны лишние скобки после error_function
-result = minimize_scalar(error_function, bounds=(dt_min, dt_max), method='bounded')
-
-if result.success:
-    optimal_dt = result.x
-    min_error = result.fun
-    print(f"Оптимальный шаг dt = {optimal_dt:.6f}")
-    print(f"Минимальная относительная погрешность = {min_error:.6f}")
-else:
-    print("Оптимизация не удалась")
+if __name__ == "__main__":
+    main()
